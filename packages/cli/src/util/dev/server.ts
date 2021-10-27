@@ -24,8 +24,8 @@ import npa from 'npm-package-arg';
 
 //@ts-ignore
 import { run } from '@vercel/websandbox';
-import { getMiddlewareInfo } from 'next/dist/server/require';
-import { getMiddlewareRegex } from 'next/dist/shared/lib/router/utils/get-middleware-regex';
+//@ts-ignore
+import type { FetchEventResult } from '@vercel/websandbox/dist/types';
 // installs fetch globally
 import 'next/dist/server/node-polyfill-fetch';
 import Proxy from 'http-proxy';
@@ -98,20 +98,12 @@ import {
 import { ProjectEnvVariable, ProjectSettings } from '../../types';
 import exposeSystemEnvs from './expose-system-envs';
 import { IncomingMessage, ServerResponse } from 'http';
-import { getRouteMatcher } from 'next/dist/shared/lib/router/utils/route-matcher';
-import {
-  ParsedNextUrl,
-  parseNextUrl,
-} from 'next/dist/shared/lib/router/utils/parse-next-url';
 import { ParsedUrlQuery, stringify as stringifyQs } from 'querystring';
 import {
   format as formatUrl,
   parse as parseUrl,
   UrlWithParsedQuery,
 } from 'url';
-
-import type { FetchEventResult } from 'next/dist/server/web/types';
-import { MiddlewareManifest } from 'next/dist/build/webpack/plugins/middleware-plugin';
 
 const frontendRuntimeSet = new Set(
   frameworkList.map(f => f.useRuntime?.use || '@vercel/static-build')
@@ -280,21 +272,21 @@ export default class DevServer {
     process.exit(code);
   }
 
-  protected middlewareManifest?: MiddlewareManifest;
   protected getMiddleware() {
     const middlewareManifestPath =
       '/Users/gary/code/edge-functions/examples/geolocation/.next/server/middleware-manifest.json';
-    // this.middlewareManifest = require(middlewareManifestPath);
-    this.middlewareManifest = JSON.parse(
+    const middlewareManifest = JSON.parse(
       fs.readFileSync(middlewareManifestPath, 'utf8')
     );
 
-    const result = Object.keys(this.middlewareManifest?.middleware || {}).map(
+    const result = Object.keys(middlewareManifest?.middleware || {}).map(
       page => ({
-        match: getRouteMatcher(getMiddlewareRegex(page)),
+        match: (pathname: string | undefined) =>
+          pathname && /^\/.*$/.exec(pathname),
         page,
       })
     );
+    console.log('getMiddlewareREsult', result);
 
     return result;
   }
@@ -306,92 +298,119 @@ export default class DevServer {
     parsed: UrlWithParsedQuery;
     requestId: string;
   }): Promise<FetchEventResult | null> {
-    const page: { name?: string; params?: { [key: string]: string } } = {};
-    // if (await this.hasPage(params.parsedUrl.pathname)) {
-    //   page.name = params.parsedUrl.pathname
-    // } else if (this.dynamicRoutes) {
-    //   for (const dynamicRoute of this.dynamicRoutes) {
-    //     const matchParams = dynamicRoute.match(params.parsedUrl.pathname)
-    //     if (matchParams) {
-    //       page.name = dynamicRoute.page
-    //       page.params = matchParams
-    //       break
-    //     }
-    //   }
-    // }
+    try {
+      const page: { name?: string; params?: { [key: string]: string } } = {};
+      // if (await this.hasPage(params.parsedUrl.pathname)) {
+      //   page.name = params.parsedUrl.pathname
+      // } else if (this.dynamicRoutes) {
+      //   for (const dynamicRoute of this.dynamicRoutes) {
+      //     const matchParams = dynamicRoute.match(params.parsedUrl.pathname)
+      //     if (matchParams) {
+      //       page.name = dynamicRoute.page
+      //       page.params = matchParams
+      //       break
+      //     }
+      //   }
+      // }
 
-    let result: FetchEventResult | null = null;
+      let result: FetchEventResult | null = null;
 
-    for (const middleware of this.getMiddleware() || []) {
-      if (middleware.match(params.parsedUrl.pathname)) {
-        if (!(await this.hasMiddleware(middleware.page))) {
-          console.warn(
-            `The Edge Function for ${middleware.page} was not found`
+      for (const middleware of this.getMiddleware() || []) {
+        if (middleware.match(params.parsedUrl.pathname)) {
+          if (!(await this.hasMiddleware())) {
+            console.warn(
+              `The Edge Function for ${middleware.page} was not found`
+            );
+            continue;
+          }
+
+          // await this.ensureMiddleware(middleware.page);
+
+          const distDir =
+            '/Users/gary/code/edge-functions/examples/geolocation/.next';
+          const manifestPath = path.join(
+            distDir,
+            'server/middleware-manifest.json'
           );
-          continue;
-        }
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          // this is an array atm, pull the first item.
+          const middlewareInfo = manifest.sortedMiddleware.map(
+            (middlewarePath: string) => {
+              return {
+                name: manifest.middleware[middlewarePath].name,
+                paths: manifest.middleware[middlewarePath].files.map(
+                  (relativePath: string) => {
+                    return path.join(distDir, relativePath);
+                  }
+                ),
+              };
+            }
+          )[0];
 
-        // await this.ensureMiddleware(middleware.page);
+          console.log('about to call run', middlewareInfo);
 
-        const middlewareInfo = getMiddlewareInfo({
-          dev: true,
-          distDir: '/Users/gary/code/edge-functions/examples/geolocation/.next',
-          // distDir: this.distDir,
-          page: middleware.page,
-          serverless: false,
-          // serverless: this._isLikeServerless,
-        });
+          result = await run({
+            name: middlewareInfo.name,
+            paths: middlewareInfo.paths,
+            request: {
+              headers: params.request.headers,
+              method: params.request.method || 'GET',
+              url: params.request.url!,
+              // url: (params.request as any).__NEXT_INIT_URL,
+              page: page,
+            },
+          });
+          console.log('middleware result', result);
 
-        console.log('middlewareInfo', middlewareInfo);
+          // if (!this.renderOpts.dev) {
+          //   result.promise.catch((error) => {
+          //     console.error(`Uncaught: middleware error after responding`, error)
+          //   })
 
-        result = await run({
-          name: middlewareInfo.name,
-          paths: middlewareInfo.paths,
-          request: {
-            headers: params.request.headers,
-            method: params.request.method || 'GET',
-            url: params.request.url!,
-            // url: (params.request as any).__NEXT_INIT_URL,
-            page: page,
-          },
-        });
-
-        // if (!this.renderOpts.dev) {
-        //   result.promise.catch((error) => {
-        //     console.error(`Uncaught: middleware error after responding`, error)
-        //   })
-
-        //   result.waitUntil.catch((error) => {
-        //     console.error(`Uncaught: middleware waitUntil errored`, error)
-        //   })
-        // }
-        //@ts-ignore
-        if (!result.response.headers.has('x-middleware-next')) {
-          break;
+          //   result.waitUntil.catch((error) => {
+          //     console.error(`Uncaught: middleware waitUntil errored`, error)
+          //   })
+          // }
+          //@ts-ignore
+          if (!result.response.headers.has('x-middleware-next')) {
+            break;
+          }
         }
       }
-    }
 
-    if (!result) {
-      this.send404(params.request, params.response, params.requestId);
-    }
+      if (!result) {
+        this.send404(params.request, params.response, params.requestId);
+      }
 
-    return result;
+      return result;
+    } catch (e) {
+      console.log('caught an error');
+    }
   }
 
-  protected async hasMiddleware(pathname: string): Promise<boolean> {
+  protected async hasMiddleware(): Promise<boolean> {
     try {
-      return (
-        getMiddlewareInfo({
-          dev: true,
-          // dev: this.renderOpts.dev,
-          distDir: '/Users/gary/code/edge-functions/examples/geolocation/.next',
-          // distDir: this.distDir,
-          page: pathname,
-          serverless: false,
-          // serverless: this._isLikeServerless,
-        }).paths.length > 0
+      const distDir =
+        '/Users/gary/code/edge-functions/examples/geolocation/.next';
+      const manifestPath = path.join(
+        distDir,
+        'server/middleware-manifest.json'
       );
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      // this is an array atm, pull the first item.
+      const middlewareInfo = manifest.sortedMiddleware.map(
+        (middlewarePath: string) => {
+          return {
+            name: manifest.middleware[middlewarePath].name,
+            paths: manifest.middleware[middlewarePath].files.map(
+              (relativePath: string) => {
+                return path.join(distDir, relativePath);
+              }
+            ),
+          };
+        }
+      )[0];
+      return middlewareInfo.paths.length > 0;
     } catch (_) {}
 
     return false;
@@ -1564,6 +1583,7 @@ export default class DevServer {
         parsed: parseUrl(req.url!, true),
       });
     } catch (err) {
+      console.log('error', err);
       // if (isError(err) && err.code === 'ENOENT') {
       //   await this.render404(req, res, parsed)
       //   return { finished: true }
@@ -1579,6 +1599,8 @@ export default class DevServer {
         finished: true,
       };
     }
+
+    console.log('result');
 
     if (result === null) {
       return { finished: true };
