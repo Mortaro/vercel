@@ -26,7 +26,7 @@ import npa from 'npm-package-arg';
 import { run } from '@vercel/websandbox';
 //@ts-ignore
 import type { FetchEventResult } from '@vercel/websandbox/dist/types';
-// installs fetch globally
+
 import Proxy from 'http-proxy';
 
 import { getVercelIgnore, fileNameSymbol } from '@vercel/client';
