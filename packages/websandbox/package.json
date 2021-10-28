@@ -27,6 +27,7 @@
     "@peculiar/webcrypto": "1.2.0",
     "@types/ua-parser-js": "0.7.36",
     "cookie": "0.4.1",
+    "esbuild": "0.13.9",
     "formdata-node": "4.3.1",
     "node-fetch": "2",
     "ua-parser-js": "1.0.1",

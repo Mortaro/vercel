@@ -1,4 +1,5 @@
 import type { NodeHeaders } from './types';
+import {Headers} from 'node-fetch';
 
 export async function* streamToIterator<T>(
   readable: ReadableStream<T>

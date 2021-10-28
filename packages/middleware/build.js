@@ -4,17 +4,20 @@ const execa = require('execa');
 const { join } = require('path');
 
 async function main() {
-  const srcDir = join(__dirname, 'src');
+  // const srcDir = join(__dirname, 'src');
   const outDir = join(__dirname, 'dist');
 
   // Start fresh
   await fs.remove(outDir);
 
-  await execa(
-    'ncc',
-    ['build', join(srcDir, 'index.ts'), '-o', outDir, '--external', 'esbuild'],
-    { stdio: 'inherit' }
-  );
+  await execa('tsc', [], {
+    stdio: 'inherit',
+  })
+  // await execa(
+  //   'ncc',
+  //   ['build', join(srcDir, 'index.ts'), '-o', outDir, '--external', 'esbuild'],
+  //   { stdio: 'inherit' }
+  // );
 
   await fs.copyFile(join(__dirname, 'entries.js'), join(outDir, 'entries.js'));
 }

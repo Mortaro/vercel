@@ -17,9 +17,16 @@
     "dist"
   ],
   "dependencies": {
-    "esbuild": "0.13.8"
+    "@vercel/build-utils": "2.12.2",
+    "@vercel/websandbox": "0.0.0-canary.0",
+    "esbuild": "0.13.8",
+    "http-proxy": "1.18.1",
+    "querystring": "0.2.1",
+    "url": "0.11.0"
   },
   "devDependencies": {
+    "@types/glob": "7.2.0",
+    "@types/http-proxy": "1.17.7",
     "@types/node": "16.11.4",
     "@vercel/ncc": "0.24.0",
     "globby": "11"
